@@ -7,11 +7,9 @@ import { NodeSearch } from '@/components/node-search';
 import { GroupNode } from '@/components/labeled-group-node';
 import { useFlowUpload } from '@/context/flowUploadContext';
 import { useThreadSelect } from '@/context/threadSelectContext';
-import FlowUploader from '@/features/FlowUploader';
 
 /* ────────────────────────────────────────────────────────────
-   Custom node renderers for reactflow-graph.json schema
-   Node types: component, condition, branch, thread
+   Custom node renderers
    ──────────────────────────────────────────────────────────── */
 
 const ComponentNode = ({ data }: any) => (
@@ -66,74 +64,25 @@ const ConditionNode = ({ data }: any) => (
     </div>
 );
 
-const BranchNode = ({ data }: any) => (
-    <div className="bg-green-50 rounded-lg border-2 border-green-400 shadow-sm min-w-[140px] text-xs">
-        <Handle type="target" position={Position.Top} className="!bg-green-500 !w-3 !h-3 !border-2 !border-white" />
-
-        <div className="px-3 py-2 border-b border-green-200">
-            <strong className="text-sm font-bold text-green-900">{data.label}</strong>
-            {data.guard && <div className="text-green-700 mt-0.5">guard: <code className="bg-green-100 px-1 rounded">{data.guard}</code></div>}
+/* Thread group container — wraps its children */
+const ThreadGroupNode = ({ data }: any) => (
+    <div
+        className="rounded-xl border-2 text-xs h-full w-full overflow-visible"
+        style={{
+            borderColor: data.color || '#6b7280',
+            backgroundColor: `${data.color}08`,
+        }}
+    >
+        <div
+            className="flex items-center gap-2 px-3 py-2 rounded-t-[10px]"
+            style={{ backgroundColor: `${data.color}15` }}
+        >
+            <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: data.color }} />
+            <strong className="text-sm font-bold">{data.label}</strong>
+            {data.description && (
+                <span className="text-[10px] text-gray-500 truncate">— {data.description}</span>
+            )}
         </div>
-
-        {data.renderedChildren?.length > 0 && (
-            <div className="px-3 py-1.5 text-green-800">
-                renders: {data.renderedChildren.join(', ')}
-            </div>
-        )}
-
-        {data.threadIds?.length > 0 && (
-            <div className="px-3 py-1 border-t border-green-200 flex gap-1 flex-wrap">
-                {data.threadIds.map((t: string, i: number) => (
-                    <span key={t} className="px-1.5 py-0.5 rounded-full text-white text-[9px] font-medium"
-                        style={{ backgroundColor: data.threadColors?.[i] || '#6b7280' }}>
-                        {t}
-                    </span>
-                ))}
-            </div>
-        )}
-
-        <Handle type="source" position={Position.Bottom} className="!bg-green-500 !w-3 !h-3 !border-2 !border-white" />
-    </div>
-);
-
-const ThreadNode = ({ data }: any) => (
-    <div className="rounded-lg border-2 shadow-sm min-w-[180px] text-xs"
-        style={{ borderColor: data.color || '#6b7280', backgroundColor: `${data.color}10` }}>
-        <Handle type="target" position={Position.Top} className="!w-3 !h-3 !border-2 !border-white"
-            style={{ backgroundColor: data.color || '#6b7280' }} />
-
-        <div className="px-3 py-2 border-b" style={{ borderColor: `${data.color}40` }}>
-            <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full" style={{ backgroundColor: data.color }} />
-                <strong className="text-sm font-bold">{data.label}</strong>
-            </div>
-            {data.description && <div className="text-gray-600 mt-0.5">{data.description}</div>}
-        </div>
-
-        {data.terminalComponents?.length > 0 && (
-            <div className="px-3 py-1.5 text-gray-700">
-                terminals: {data.terminalComponents.join(', ')}
-            </div>
-        )}
-
-        {data.steps != null && (
-            <div className="px-3 py-1 border-t text-gray-500" style={{ borderColor: `${data.color}40` }}>
-                {data.steps} step{data.steps > 1 ? 's' : ''}
-            </div>
-        )}
-
-        <Handle type="source" position={Position.Bottom} className="!w-3 !h-3 !border-2 !border-white"
-            style={{ backgroundColor: data.color || '#6b7280' }} />
-    </div>
-);
-
-/* Fallback for unknown node types */
-const DefaultCustomNode = ({ data }: any) => (
-    <div className="bg-white rounded-lg border border-gray-300 shadow-sm min-w-[180px] text-xs p-3">
-        <Handle type="target" position={Position.Top} style={{ height: '6px', top: '-6px', width: '100%', borderRadius: 0, border: 'none', background: 'transparent' }} />
-        {data?.label && <strong className="text-sm font-bold truncate block w-full border-b pb-1 mb-1">{data.label}</strong>}
-        <pre className="text-[10px] overflow-x-auto max-h-28 p-1 bg-gray-50 rounded" style={{ whiteSpace: 'pre-wrap' }}>{JSON.stringify(data, null, 2)}</pre>
-        <Handle type="source" position={Position.Bottom} style={{ height: '6px', bottom: '-6px', width: '100%', borderRadius: 0, border: 'none', background: 'transparent' }} />
     </div>
 );
 
@@ -142,9 +91,7 @@ const DefaultCustomNode = ({ data }: any) => (
 const nodeTypes = {
     component: ComponentNode,
     condition: ConditionNode,
-    branch: BranchNode,
-    thread: ThreadNode,
-    custom: DefaultCustomNode,
+    thread: ThreadGroupNode,
     labeledGroupNode: GroupNode,
 };
 
@@ -158,8 +105,8 @@ const getLayoutedElements = (nodes: any[], edges: any[], direction = 'TB') => {
     dagreGraph.setGraph({ rankdir: direction, nodesep: 150, ranksep: 200, edgesep: 50 });
 
     nodes.forEach((node) => {
-        if (node.type === 'labeledGroupNode') {
-            dagreGraph.setNode(node.id, { label: node.data.label, clusterLabelPos: 'top' });
+        if (node.type === 'thread' || node.type === 'labeledGroupNode') {
+            dagreGraph.setNode(node.id, { label: node.data?.label, clusterLabelPos: 'top' });
         } else {
             dagreGraph.setNode(node.id, { width: 250, height: 150 });
         }
@@ -179,17 +126,22 @@ const getLayoutedElements = (nodes: any[], edges: any[], direction = 'TB') => {
 
     const newNodes = nodes.map((node) => {
         const nodeWithPosition = dagreGraph.node(node.id);
+        if (!nodeWithPosition) return node;
 
         let x = nodeWithPosition.x - nodeWithPosition.width / 2;
         let y = nodeWithPosition.y - nodeWithPosition.height / 2;
 
         if (node.parentId) {
             const parentWithPosition = dagreGraph.node(node.parentId);
-            const parentX = parentWithPosition.x - parentWithPosition.width / 2;
-            const parentY = parentWithPosition.y - parentWithPosition.height / 2;
-            x = x - parentX;
-            y = y - parentY;
+            if (parentWithPosition) {
+                const parentX = parentWithPosition.x - parentWithPosition.width / 2;
+                const parentY = parentWithPosition.y - parentWithPosition.height / 2;
+                x = x - parentX;
+                y = y - parentY;
+            }
         }
+
+        const isGroup = node.type === 'thread' || node.type === 'labeledGroupNode';
 
         return {
             ...node,
@@ -199,7 +151,7 @@ const getLayoutedElements = (nodes: any[], edges: any[], direction = 'TB') => {
                 x: Math.round(x),
                 y: Math.round(y),
             },
-            ...(node.type === 'labeledGroupNode' ? {
+            ...(isGroup ? {
                 style: {
                     width: Math.round(nodeWithPosition.width),
                     height: Math.round(nodeWithPosition.height),
@@ -210,6 +162,211 @@ const getLayoutedElements = (nodes: any[], edges: any[], direction = 'TB') => {
 
     return { nodes: newNodes, edges };
 };
+
+/* ── Thread grouping helper ─────────────────────────────── */
+
+function buildThreadGroups(rawNodes: any[], rawEdges: any[]) {
+    // Index nodes and edges
+    const nodeById = new Map<string, any>();
+    rawNodes.forEach((n: any) => nodeById.set(n.id, n));
+
+    // Build adjacency: source → targets, target → sources
+    const outEdges = new Map<string, any[]>(); // source → edges
+    const inEdges = new Map<string, any[]>();  // target → edges
+    rawEdges.forEach((e: any) => {
+        if (!outEdges.has(e.source)) outEdges.set(e.source, []);
+        outEdges.get(e.source)!.push(e);
+        if (!inEdges.has(e.target)) inEdges.set(e.target, []);
+        inEdges.get(e.target)!.push(e);
+    });
+
+    // Find all thread nodes and their associated branch nodes
+    const threadNodes = rawNodes.filter((n: any) => n.type === 'thread');
+
+    // For each thread, trace its member nodes
+    // A thread's label (e.g. "t1") maps to branch nodes via data.threadIds
+    const threadMembers = new Map<string, Set<string>>(); // threadNodeId → set of member node IDs
+
+    for (const threadNode of threadNodes) {
+        const threadLabel = threadNode.data?.label;
+        if (!threadLabel) continue;
+
+        const members = new Set<string>();
+        threadMembers.set(threadNode.id, members);
+
+        // Find all branch nodes that belong to this thread
+        const branchNodes = rawNodes.filter(
+            (n: any) => n.type === 'branch' && n.data?.threadIds?.includes(threadLabel)
+        );
+
+        for (const branch of branchNodes) {
+            members.add(branch.id);
+
+            // Walk backwards: branch ← condition ← component
+            const condEdges = inEdges.get(branch.id) || [];
+            for (const ce of condEdges) {
+                const sourceNode = nodeById.get(ce.source);
+                if (sourceNode) {
+                    members.add(sourceNode.id);
+                    // If it's a condition, walk one more step back to the component
+                    if (sourceNode.type === 'condition') {
+                        const compEdges = inEdges.get(sourceNode.id) || [];
+                        for (const compE of compEdges) {
+                            const compNode = nodeById.get(compE.source);
+                            if (compNode) members.add(compNode.id);
+                        }
+                    }
+                }
+            }
+
+            // Walk forwards: branch → child components
+            const childEdges = outEdges.get(branch.id) || [];
+            for (const childE of childEdges) {
+                const childNode = nodeById.get(childE.target);
+                if (childNode) members.add(childNode.id);
+            }
+        }
+    }
+
+    // Find nodes that appear in multiple threads (need duplication)
+    const nodeToThreads = new Map<string, string[]>(); // nodeId → [threadNodeId, ...]
+    for (const [threadNodeId, members] of threadMembers) {
+        for (const memberId of members) {
+            if (!nodeToThreads.has(memberId)) nodeToThreads.set(memberId, []);
+            nodeToThreads.get(memberId)!.push(threadNodeId);
+        }
+    }
+
+    // Build output nodes and edges
+    const outputNodes: any[] = [];
+    const outputEdges: any[] = [];
+    const idRemap = new Map<string, Map<string, string>>(); // threadNodeId → (oldId → newId)
+
+    // Add thread group nodes first
+    for (const threadNode of threadNodes) {
+        outputNodes.push({
+            id: threadNode.id,
+            type: 'thread',
+            data: threadNode.data,
+            position: { x: 0, y: 0 },
+        });
+        idRemap.set(threadNode.id, new Map());
+    }
+
+    // Process member nodes — duplicate those shared across threads
+    const processedStandalone = new Set<string>();
+    for (const [threadNodeId, members] of threadMembers) {
+        const remap = idRemap.get(threadNodeId)!;
+
+        for (const memberId of members) {
+            const node = nodeById.get(memberId);
+            if (!node) continue;
+
+            const threads = nodeToThreads.get(memberId) || [];
+            if (threads.length > 1) {
+                // Shared node — duplicate with unique ID per thread
+                const newId = `${memberId}__${threadNodeId}`;
+                remap.set(memberId, newId);
+                outputNodes.push({
+                    ...node,
+                    id: newId,
+                    parentId: threadNodeId,
+                    position: { x: 0, y: 0 },
+                    extent: 'parent' as const,
+                });
+            } else {
+                // Unique to this thread
+                remap.set(memberId, memberId);
+                outputNodes.push({
+                    ...node,
+                    id: memberId,
+                    parentId: threadNodeId,
+                    position: { x: 0, y: 0 },
+                    extent: 'parent' as const,
+                });
+                processedStandalone.add(memberId);
+            }
+        }
+    }
+
+    // Add nodes not in any thread as standalone
+    for (const node of rawNodes) {
+        if (node.type === 'thread') continue;
+        if (processedStandalone.has(node.id)) continue;
+        if (nodeToThreads.has(node.id)) continue; // handled via duplication
+        outputNodes.push({
+            ...node,
+            position: node.position || { x: 0, y: 0 },
+        });
+    }
+
+    // Remap edges
+    // For edges between nodes within the same thread, remap IDs
+    // For edges between threads or standalone nodes, create edges for each thread copy
+    const addedEdgeIds = new Set<string>();
+
+    for (const edge of rawEdges) {
+        // Find which threads contain source and target
+        const sourceThreads = nodeToThreads.get(edge.source) || [];
+        const targetThreads = nodeToThreads.get(edge.target) || [];
+
+        if (sourceThreads.length === 0 && targetThreads.length === 0) {
+            // Both standalone — keep original edge
+            if (!addedEdgeIds.has(edge.id)) {
+                outputEdges.push({ ...edge });
+                addedEdgeIds.add(edge.id);
+            }
+        } else {
+            // Find common threads (both in same thread group)
+            const commonThreads = sourceThreads.filter(t => targetThreads.includes(t));
+
+            if (commonThreads.length > 0) {
+                // Nodes share thread(s) — create edge per common thread
+                for (const threadNodeId of commonThreads) {
+                    const remap = idRemap.get(threadNodeId)!;
+                    const newSource = remap.get(edge.source) || edge.source;
+                    const newTarget = remap.get(edge.target) || edge.target;
+                    const newEdgeId = `${edge.id}__${threadNodeId}`;
+                    if (!addedEdgeIds.has(newEdgeId)) {
+                        outputEdges.push({
+                            ...edge,
+                            id: newEdgeId,
+                            source: newSource,
+                            target: newTarget,
+                        });
+                        addedEdgeIds.add(newEdgeId);
+                    }
+                }
+            } else {
+                // Source and target in different threads or one is standalone
+                // Create edge for each thread the source is in, connecting to each thread the target is in
+                const srcIds = sourceThreads.length > 0
+                    ? sourceThreads.map(t => idRemap.get(t)!.get(edge.source) || edge.source)
+                    : [edge.source];
+                const tgtIds = targetThreads.length > 0
+                    ? targetThreads.map(t => idRemap.get(t)!.get(edge.target) || edge.target)
+                    : [edge.target];
+
+                for (const src of srcIds) {
+                    for (const tgt of tgtIds) {
+                        const newEdgeId = `${edge.id}__${src}__${tgt}`;
+                        if (!addedEdgeIds.has(newEdgeId)) {
+                            outputEdges.push({
+                                ...edge,
+                                id: newEdgeId,
+                                source: src,
+                                target: tgt,
+                            });
+                            addedEdgeIds.add(newEdgeId);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    return { nodes: outputNodes, edges: outputEdges };
+}
 
 /* ── FlowWithSearch wrapper ─────────────────────────────── */
 
@@ -280,17 +437,40 @@ export default function FlowChart() {
 
         const { nodes: rawNodes, edges: rawEdges } = rawGraph;
 
-        // Map JSON nodes to React Flow nodes
-        const allRfNodes = rawNodes.map((n: any) => ({
+        /* ── Step 1: Build thread groups (duplication + parentId) ── */
+        const { nodes: groupedNodes, edges: groupedEdges } = buildThreadGroups(rawNodes, rawEdges);
+
+        /* ── Step 2: Thread filtering ──────────────────────────── */
+        const filteredNodes = groupedNodes.filter((node: any) => {
+            if (node.type === 'thread') {
+                return selectedThreadIds.has(node.data.label);
+            }
+            if (node.parentId) {
+                // Children of a thread group: visible only if the parent thread is visible
+                const parentNode = groupedNodes.find((n: any) => n.id === node.parentId && n.type === 'thread');
+                if (parentNode) {
+                    return selectedThreadIds.has(parentNode.data.label);
+                }
+            }
+            return true;
+        });
+
+        const visibleNodeIds = new Set(filteredNodes.map((n: any) => n.id));
+
+        const filteredEdges = groupedEdges.filter((edge: any) => {
+            return visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target);
+        });
+
+        /* ── Step 3: Map to React Flow format ──────────────────── */
+        const rfNodes = filteredNodes.map((n: any) => ({
             id: n.id,
-            type: n.type || 'custom',
-            position: n.position || undefined,
+            type: n.type || 'component',
+            position: n.position || { x: 0, y: 0 },
             data: n.data || {},
-            ...(n.parentId ? { parentId: n.parentId } : {}),
+            ...(n.parentId ? { parentId: n.parentId, extent: 'parent' as const } : {}),
         }));
 
-        // Map edges
-        const allRfEdges = rawEdges.map((e: any) => ({
+        const rfEdges = filteredEdges.map((e: any) => ({
             id: e.id || `e-${e.source}-${e.target}`,
             source: e.source,
             target: e.target,
@@ -301,69 +481,15 @@ export default function FlowChart() {
             data: e.data || undefined,
         }));
 
-        /* ── Thread filtering ──────────────────────────────── */
-
-        // Step 1: Filter nodes by thread selection
-        const filteredNodes = allRfNodes.filter((node: any) => {
-            if (node.type === 'thread') {
-                // Thread nodes: visible only if their label is selected
-                return selectedThreadIds.has(node.data.label);
-            }
-            if (node.type === 'branch') {
-                // Branch nodes: visible if any threadId is selected
-                const branchThreadIds: string[] = node.data.threadIds || [];
-                return branchThreadIds.length === 0 || branchThreadIds.some((tid: string) => selectedThreadIds.has(tid));
-            }
-            // Structural nodes (component, condition, labeledGroupNode, custom): always kept
-            return true;
-        });
-
-        const visibleNodeIds = new Set(filteredNodes.map((n: any) => n.id));
-
-        // Step 2: Filter edges
-        const filteredEdges = allRfEdges.filter((edge: any) => {
-            const edgeThreadIds: string[] = edge.data?.threadIds || [];
-            if (edgeThreadIds.length > 0) {
-                // Thread-tagged edges: keep only if at least one thread is selected
-                return edgeThreadIds.some((tid: string) => selectedThreadIds.has(tid));
-            }
-            // Non-thread edges: keep if both endpoints are visible
-            return visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target);
-        });
-
-        // Step 3: Remove orphaned non-structural nodes
-        const connectedNodeIds = new Set<string>();
-        filteredEdges.forEach((e: any) => {
-            connectedNodeIds.add(e.source);
-            connectedNodeIds.add(e.target);
-        });
-
-        const structuralTypes = new Set(['component', 'condition', 'labeledGroupNode']);
-        const finalNodes = filteredNodes.filter((node: any) => {
-            if (structuralTypes.has(node.type)) return true;
-            return connectedNodeIds.has(node.id);
-        });
-
-        const finalNodeIds = new Set(finalNodes.map((n: any) => n.id));
-        const finalEdges = filteredEdges.filter((e: any) => finalNodeIds.has(e.source) && finalNodeIds.has(e.target));
-
-        /* ── Layout ────────────────────────────────────────── */
-
-        const anyPositioned = finalNodes.some((n: any) => n.position && typeof n.position.x === 'number' && typeof n.position.y === 'number');
-        if (!anyPositioned) {
-            const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(finalNodes, finalEdges, 'TB');
-            setNodes(layoutedNodes);
-            setEdges(layoutedEdges);
-        } else {
-            setNodes(finalNodes);
-            setEdges(finalEdges);
-        }
+        /* ── Step 4: Layout ────────────────────────────────────── */
+        const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(rfNodes, rfEdges, 'TB');
+        setNodes(layoutedNodes);
+        setEdges(layoutedEdges);
 
     }, [rawGraph, selectedThreadIds]);
 
     return (
         <div style={{ width: '100%', height: '80vh', position: 'relative' }} className="border rounded-xl bg-white shadow-sm overflow-hidden">
-            {/* <FlowUploader /> */}
             {loading && <div className="absolute inset-0 flex items-center justify-center bg-white/50 z-20">Loading Tree Layout...</div>}
 
             <ReactFlowProvider>
