@@ -16,6 +16,7 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar"
 import { RiGalleryLine } from "@remixicon/react"
+import FlowUploader from "@/features/FlowUploader"
 
 // This is sample data.
 const data = {
@@ -120,6 +121,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarGroup>
       </SidebarContent>
       <SidebarRail />
+      <FlowUploader />
     </Sidebar>
   )
 }
