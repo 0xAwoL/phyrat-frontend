@@ -6,6 +6,7 @@ import dagre from 'dagre';
 import { NodeSearch } from '@/components/node-search';
 import { GroupNode } from '@/components/labeled-group-node';
 import { useFlowUpload } from '@/context/flowUploadContext';
+import { useThreadSelect } from '@/context/threadSelectContext';
 import FlowUploader from '@/features/FlowUploader';
 
 /* ────────────────────────────────────────────────────────────
@@ -260,6 +261,7 @@ function FlowWithSearch({
 
 export default function FlowChart() {
     const { rawGraph, loading } = useFlowUpload();
+    const { selectedThreadIds } = useThreadSelect();
 
     const [nodes, setNodes] = useState<any[]>([]);
     const [edges, setEdges] = useState<any[]>([]);
@@ -278,10 +280,8 @@ export default function FlowChart() {
 
         const { nodes: rawNodes, edges: rawEdges } = rawGraph;
 
-        // Map JSON nodes to React Flow nodes.
-        // The JSON already has the correct { id, type, position, data } structure,
-        // so we pass `n.data` as the React Flow node `data` (not the entire node).
-        const rfNodes = rawNodes.map((n: any) => ({
+        // Map JSON nodes to React Flow nodes
+        const allRfNodes = rawNodes.map((n: any) => ({
             id: n.id,
             type: n.type || 'custom',
             position: n.position || undefined,
@@ -289,8 +289,8 @@ export default function FlowChart() {
             ...(n.parentId ? { parentId: n.parentId } : {}),
         }));
 
-        // Map edges — include label, animated, style, and data from the JSON
-        const rfEdges = rawEdges.map((e: any) => ({
+        // Map edges
+        const allRfEdges = rawEdges.map((e: any) => ({
             id: e.id || `e-${e.source}-${e.target}`,
             source: e.source,
             target: e.target,
@@ -301,18 +301,65 @@ export default function FlowChart() {
             data: e.data || undefined,
         }));
 
-        // Auto-layout via dagre if no node has a defined position
-        const anyPositioned = rfNodes.some((n: any) => n.position && typeof n.position.x === 'number' && typeof n.position.y === 'number');
+        /* ── Thread filtering ──────────────────────────────── */
+
+        // Step 1: Filter nodes by thread selection
+        const filteredNodes = allRfNodes.filter((node: any) => {
+            if (node.type === 'thread') {
+                // Thread nodes: visible only if their label is selected
+                return selectedThreadIds.has(node.data.label);
+            }
+            if (node.type === 'branch') {
+                // Branch nodes: visible if any threadId is selected
+                const branchThreadIds: string[] = node.data.threadIds || [];
+                return branchThreadIds.length === 0 || branchThreadIds.some((tid: string) => selectedThreadIds.has(tid));
+            }
+            // Structural nodes (component, condition, labeledGroupNode, custom): always kept
+            return true;
+        });
+
+        const visibleNodeIds = new Set(filteredNodes.map((n: any) => n.id));
+
+        // Step 2: Filter edges
+        const filteredEdges = allRfEdges.filter((edge: any) => {
+            const edgeThreadIds: string[] = edge.data?.threadIds || [];
+            if (edgeThreadIds.length > 0) {
+                // Thread-tagged edges: keep only if at least one thread is selected
+                return edgeThreadIds.some((tid: string) => selectedThreadIds.has(tid));
+            }
+            // Non-thread edges: keep if both endpoints are visible
+            return visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target);
+        });
+
+        // Step 3: Remove orphaned non-structural nodes
+        const connectedNodeIds = new Set<string>();
+        filteredEdges.forEach((e: any) => {
+            connectedNodeIds.add(e.source);
+            connectedNodeIds.add(e.target);
+        });
+
+        const structuralTypes = new Set(['component', 'condition', 'labeledGroupNode']);
+        const finalNodes = filteredNodes.filter((node: any) => {
+            if (structuralTypes.has(node.type)) return true;
+            return connectedNodeIds.has(node.id);
+        });
+
+        const finalNodeIds = new Set(finalNodes.map((n: any) => n.id));
+        const finalEdges = filteredEdges.filter((e: any) => finalNodeIds.has(e.source) && finalNodeIds.has(e.target));
+
+        /* ── Layout ────────────────────────────────────────── */
+
+        const anyPositioned = finalNodes.some((n: any) => n.position && typeof n.position.x === 'number' && typeof n.position.y === 'number');
         if (!anyPositioned) {
-            const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(rfNodes, rfEdges, 'TB');
+            const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(finalNodes, finalEdges, 'TB');
             setNodes(layoutedNodes);
             setEdges(layoutedEdges);
         } else {
-            setNodes(rfNodes);
-            setEdges(rfEdges);
+            setNodes(finalNodes);
+            setEdges(finalEdges);
         }
 
-    }, [rawGraph]);
+    }, [rawGraph, selectedThreadIds]);
 
     return (
         <div style={{ width: '100%', height: '80vh', position: 'relative' }} className="border rounded-xl bg-white shadow-sm overflow-hidden">

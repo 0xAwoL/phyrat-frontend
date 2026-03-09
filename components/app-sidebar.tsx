@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/sidebar"
 import { RiGalleryLine } from "@remixicon/react"
 import FlowUploader from "@/features/FlowUploader"
+import ThreadSelector from "@/features/ThreadSelector"
 
 // This is sample data.
 const data = {
@@ -122,6 +123,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarContent>
       <SidebarRail />
       <FlowUploader />
+      <ThreadSelector />
     </Sidebar>
   )
 }
