@@ -1,90 +1,13 @@
 "use client"
 import { useState, useCallback, useEffect } from 'react';
-import { ReactFlow, applyNodeChanges, applyEdgeChanges, Controls, Background, MiniMap, Handle, Position, Panel, useReactFlow, ReactFlowProvider } from '@xyflow/react';
+import { ReactFlow, applyNodeChanges, applyEdgeChanges, Controls, Background, MiniMap, Panel, useReactFlow, ReactFlowProvider } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import dagre from 'dagre';
 import { NodeSearch } from '@/components/node-search';
 import { GroupNode } from '@/components/labeled-group-node';
 import { useFlowUpload } from '@/context/flowUploadContext';
 import { useThreadSelect } from '@/context/threadSelectContext';
-
-/* ────────────────────────────────────────────────────────────
-   Custom node renderers
-   ──────────────────────────────────────────────────────────── */
-
-const ComponentNode = ({ data }: any) => (
-    <div className="bg-white rounded-lg border-2 border-blue-300 shadow-md min-w-[220px] max-w-[280px] text-xs">
-        <Handle type="target" position={Position.Top} className="!bg-blue-400 !w-3 !h-3 !border-2 !border-white" />
-
-        <div className={`flex items-center gap-2 px-3 py-2 rounded-t-md ${data.isServer ? 'bg-indigo-50 border-b border-indigo-200' : 'bg-amber-50 border-b border-amber-200'}`}>
-            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${data.isServer ? 'bg-indigo-200 text-indigo-800' : 'bg-amber-200 text-amber-800'}`}>
-                {data.isServer ? 'Server' : 'Client'}
-            </span>
-            <strong className="text-sm font-bold truncate">{data.label}</strong>
-        </div>
-
-        {data.summary && (
-            <p className="px-3 py-1.5 text-gray-600 leading-snug border-b border-gray-100">{data.summary}</p>
-        )}
-
-        <div className="flex gap-3 px-3 py-1.5 text-gray-500">
-            {data.stateCount > 0 && <span>🗂 {data.stateCount} state{data.stateCount > 1 ? 's' : ''}</span>}
-            {data.contextCount > 0 && <span>🔗 {data.contextCount} ctx</span>}
-            {data.requestCount > 0 && <span>📡 {data.requestCount} req</span>}
-        </div>
-
-        {data.contexts?.length > 0 && (
-            <div className="px-3 py-1 border-t border-gray-100 text-gray-500">
-                ctx: {data.contexts.join(', ')}
-            </div>
-        )}
-
-        <Handle type="source" position={Position.Bottom} className="!bg-blue-400 !w-3 !h-3 !border-2 !border-white" />
-    </div>
-);
-
-const ConditionNode = ({ data }: any) => (
-    <div className="bg-yellow-50 rounded-lg border-2 border-yellow-400 shadow-sm min-w-[120px] text-xs text-center">
-        <Handle type="target" position={Position.Top} className="!bg-yellow-500 !w-3 !h-3 !border-2 !border-white" />
-
-        <div className="px-4 py-3">
-            <span className="text-[10px] text-yellow-700 font-medium uppercase tracking-wide">{data.conditionType || 'if'}</span>
-            <div className="text-sm font-bold text-yellow-900 mt-0.5">{data.label}</div>
-        </div>
-
-        {(data.sourceContexts?.length > 0 || data.sourceStates?.length > 0 || data.sourceProps?.length > 0) && (
-            <div className="border-t border-yellow-200 px-3 py-1 text-yellow-700 text-left">
-                {data.sourceContexts?.length > 0 && <div>ctx: {data.sourceContexts.join(', ')}</div>}
-                {data.sourceStates?.length > 0 && <div>state: {data.sourceStates.join(', ')}</div>}
-                {data.sourceProps?.length > 0 && <div>props: {data.sourceProps.join(', ')}</div>}
-            </div>
-        )}
-
-        <Handle type="source" position={Position.Bottom} className="!bg-yellow-500 !w-3 !h-3 !border-2 !border-white" />
-    </div>
-);
-
-/* Thread group container — wraps its children */
-const ThreadGroupNode = ({ data }: any) => (
-    <div
-        className="rounded-xl border-2 text-xs h-full w-full overflow-visible"
-        style={{
-            borderColor: data.color || '#6b7280',
-            backgroundColor: `${data.color}08`,
-        }}
-    >
-        <div
-            className="flex items-center gap-2 px-3 py-2 rounded-t-[10px]"
-            style={{ backgroundColor: `${data.color}15` }}
-        >
-            <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: data.color }} />
-            <strong className="text-sm font-bold">{data.label}</strong>
-            {data.description && (
-                <span className="text-[10px] text-gray-500 truncate">— {data.description}</span>
-            )}
-        </div>
-    </div>
-);
+import { ComponentNode, ConditionNode, ThreadGroupNode } from '@/components/nodes';
 
 /* ── Node type registry ─────────────────────────────────── */
 
@@ -105,7 +28,7 @@ const getLayoutedElements = (nodes: any[], edges: any[], direction = 'TB') => {
     dagreGraph.setGraph({ rankdir: direction, nodesep: 150, ranksep: 200, edgesep: 50 });
 
     nodes.forEach((node) => {
-        if (node.type === 'thread' || node.type === 'labeledGroupNode') {
+        if (node.type === 'thread') {
             dagreGraph.setNode(node.id, { label: node.data?.label, clusterLabelPos: 'top' });
         } else {
             dagreGraph.setNode(node.id, { width: 250, height: 150 });
@@ -118,21 +41,43 @@ const getLayoutedElements = (nodes: any[], edges: any[], direction = 'TB') => {
         }
     });
 
+    const nodeIds = new Set(nodes.map((n: any) => n.id));
     edges.forEach((edge) => {
-        dagreGraph.setEdge(edge.source, edge.target);
+        if (nodeIds.has(edge.source) && nodeIds.has(edge.target)) {
+            dagreGraph.setEdge(edge.source, edge.target);
+        }
     });
 
-    dagre.layout(dagreGraph);
+    let layoutGraph = dagreGraph;
+    try {
+        dagre.layout(dagreGraph);
+    } catch (e) {
+        console.warn('Dagre compound layout failed, falling back to flat layout:', e);
+        // Fallback: flat layout without compound/setParent
+        const flatGraph = new dagre.graphlib.Graph();
+        flatGraph.setDefaultEdgeLabel(() => ({}));
+        flatGraph.setGraph({ rankdir: direction, nodesep: 150, ranksep: 200, edgesep: 50 });
+        nodes.forEach((node) => {
+            flatGraph.setNode(node.id, { width: 250, height: 150 });
+        });
+        edges.forEach((edge) => {
+            if (nodeIds.has(edge.source) && nodeIds.has(edge.target)) {
+                flatGraph.setEdge(edge.source, edge.target);
+            }
+        });
+        dagre.layout(flatGraph);
+        layoutGraph = flatGraph;
+    }
 
     const newNodes = nodes.map((node) => {
-        const nodeWithPosition = dagreGraph.node(node.id);
+        const nodeWithPosition = layoutGraph.node(node.id);
         if (!nodeWithPosition) return node;
 
         let x = nodeWithPosition.x - nodeWithPosition.width / 2;
         let y = nodeWithPosition.y - nodeWithPosition.height / 2;
 
         if (node.parentId) {
-            const parentWithPosition = dagreGraph.node(node.parentId);
+            const parentWithPosition = layoutGraph.node(node.parentId);
             if (parentWithPosition) {
                 const parentX = parentWithPosition.x - parentWithPosition.width / 2;
                 const parentY = parentWithPosition.y - parentWithPosition.height / 2;
@@ -254,7 +199,7 @@ function buildThreadGroups(rawNodes: any[], rawEdges: any[]) {
     }
 
     // Process member nodes — duplicate those shared across threads
-    const processedStandalone = new Set<string>();
+    const addedNodeIds = new Set<string>();
     for (const [threadNodeId, members] of threadMembers) {
         const remap = idRemap.get(threadNodeId)!;
 
@@ -266,7 +211,9 @@ function buildThreadGroups(rawNodes: any[], rawEdges: any[]) {
             if (threads.length > 1) {
                 // Shared node — duplicate with unique ID per thread
                 const newId = `${memberId}__${threadNodeId}`;
+                if (addedNodeIds.has(newId)) { remap.set(memberId, newId); continue; }
                 remap.set(memberId, newId);
+                addedNodeIds.add(newId);
                 outputNodes.push({
                     ...node,
                     id: newId,
@@ -277,6 +224,8 @@ function buildThreadGroups(rawNodes: any[], rawEdges: any[]) {
             } else {
                 // Unique to this thread
                 remap.set(memberId, memberId);
+                if (addedNodeIds.has(memberId)) continue;
+                addedNodeIds.add(memberId);
                 outputNodes.push({
                     ...node,
                     id: memberId,
@@ -284,7 +233,6 @@ function buildThreadGroups(rawNodes: any[], rawEdges: any[]) {
                     position: { x: 0, y: 0 },
                     extent: 'parent' as const,
                 });
-                processedStandalone.add(memberId);
             }
         }
     }
@@ -292,8 +240,9 @@ function buildThreadGroups(rawNodes: any[], rawEdges: any[]) {
     // Add nodes not in any thread as standalone
     for (const node of rawNodes) {
         if (node.type === 'thread') continue;
-        if (processedStandalone.has(node.id)) continue;
-        if (nodeToThreads.has(node.id)) continue; // handled via duplication
+        if (addedNodeIds.has(node.id)) continue;
+        if (nodeToThreads.has(node.id)) continue;
+        addedNodeIds.add(node.id);
         outputNodes.push({
             ...node,
             position: node.position || { x: 0, y: 0 },
@@ -464,9 +413,9 @@ export default function FlowChart() {
         /* ── Step 3: Map to React Flow format ──────────────────── */
         const rfNodes = filteredNodes.map((n: any) => ({
             id: n.id,
-            type: n.type || 'component',
-            position: n.position || { x: 0, y: 0 },
-            data: n.data || {},
+            type: n.type,
+            position: n.position,
+            data: n.data,
             ...(n.parentId ? { parentId: n.parentId, extent: 'parent' as const } : {}),
         }));
 

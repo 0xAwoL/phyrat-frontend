@@ -1,3 +1,4 @@
+"use client"
 import { AppSidebar } from "@/components/app-sidebar"
 import FlowChart from "@/features/FlowChart"
 import { FlowUploadProvider } from "@/context/flowUploadContext"
